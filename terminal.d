@@ -5665,78 +5665,82 @@ class LineGetter {
 			Introduced on January 30, 2020
 	+/
 	protected dchar[] editLineInEditor(in dchar[] line, in size_t cursorPosition) {
-		import std.conv;
-		import std.process;
-		import std.file;
-
-		char[] tmpName;
-
-		version(Windows) {
-			import core.stdc.string;
-			char[280] path;
-			auto l = GetTempPathA(cast(DWORD) path.length, path.ptr);
-			if(l == 0) throw new Exception("GetTempPathA");
-			path[l] = 0;
-			char[280] name;
-			auto r = GetTempFileNameA(path.ptr, "adr", 0, name.ptr);
-			if(r == 0) throw new Exception("GetTempFileNameA");
-			tmpName = name[0 .. strlen(name.ptr)];
-			scope(exit)
-				std.file.remove(tmpName);
-			std.file.write(tmpName, to!string(line));
-
-			string editor = environment.get("EDITOR", "notepad.exe");
-		} else {
-			import core.stdc.stdlib;
-			import core.sys.posix.unistd;
-			char[120] name;
-			string p = "/tmp/adrXXXXXX";
-			name[0 .. p.length] = p[];
-			name[p.length] = 0;
-			auto fd = mkstemp(name.ptr);
-			tmpName = name[0 .. p.length];
-			if(fd == -1) throw new Exception("mkstemp");
-			scope(exit)
-				close(fd);
-			scope(exit)
-				std.file.remove(tmpName);
-
-			string s = to!string(line);
-			while(s.length) {
-				auto x = write(fd, s.ptr, s.length);
-				if(x == -1) throw new Exception("write");
-				s = s[x .. $];
-			}
-			string editor = environment.get("EDITOR", "vi");
-		}
-
-		// FIXME the spawned process changes even more terminal state than set up here!
-
-		try {
-			version(none)
-			if(UseVtSequences) {
-				if(terminal.type == ConsoleOutputType.cellular) {
-					terminal.doTermcap("te");
-				}
-			}
-			version(Posix) {
-				import std.stdio;
-				// need to go to the parent terminal jic we're in an embedded terminal with redirection
-				terminal.write(" !! Editor may be in parent terminal !!");
-				terminal.flush();
-				spawnProcess([editor, tmpName], File("/dev/tty", "rb"), File("/dev/tty", "wb")).wait;
-			} else {
-				spawnProcess([editor, tmpName]).wait;
-			}
-			if(UseVtSequences) {
-				if(terminal.type == ConsoleOutputType.cellular)
-					terminal.doTermcap("ti");
-			}
-			import std.string;
-			return to!(dchar[])(cast(char[]) std.file.read(tmpName)).chomp;
-		} catch(Exception e) {
-			// edit failed, we should prolly tell them but idk how....
+		version(iOS) {
 			return null;
+		} else {
+			import std.conv;
+			import std.process;
+			import std.file;
+
+			char[] tmpName;
+
+			version(Windows) {
+				import core.stdc.string;
+				char[280] path;
+				auto l = GetTempPathA(cast(DWORD) path.length, path.ptr);
+				if(l == 0) throw new Exception("GetTempPathA");
+				path[l] = 0;
+				char[280] name;
+				auto r = GetTempFileNameA(path.ptr, "adr", 0, name.ptr);
+				if(r == 0) throw new Exception("GetTempFileNameA");
+				tmpName = name[0 .. strlen(name.ptr)];
+				scope(exit)
+					std.file.remove(tmpName);
+				std.file.write(tmpName, to!string(line));
+
+				string editor = environment.get("EDITOR", "notepad.exe");
+			} else {
+				import core.stdc.stdlib;
+				import core.sys.posix.unistd;
+				char[120] name;
+				string p = "/tmp/adrXXXXXX";
+				name[0 .. p.length] = p[];
+				name[p.length] = 0;
+				auto fd = mkstemp(name.ptr);
+				tmpName = name[0 .. p.length];
+				if(fd == -1) throw new Exception("mkstemp");
+				scope(exit)
+					close(fd);
+				scope(exit)
+					std.file.remove(tmpName);
+
+				string s = to!string(line);
+				while(s.length) {
+					auto x = write(fd, s.ptr, s.length);
+					if(x == -1) throw new Exception("write");
+					s = s[x .. $];
+				}
+				string editor = environment.get("EDITOR", "vi");
+			}
+
+			// FIXME the spawned process changes even more terminal state than set up here!
+
+			try {
+				version(none)
+				if(UseVtSequences) {
+					if(terminal.type == ConsoleOutputType.cellular) {
+						terminal.doTermcap("te");
+					}
+				}
+				version(Posix) {
+					import std.stdio;
+					// need to go to the parent terminal jic we're in an embedded terminal with redirection
+					terminal.write(" !! Editor may be in parent terminal !!");
+					terminal.flush();
+					spawnProcess([editor, tmpName], File("/dev/tty", "rb"), File("/dev/tty", "wb")).wait;
+				} else {
+					spawnProcess([editor, tmpName]).wait;
+				}
+				if(UseVtSequences) {
+					if(terminal.type == ConsoleOutputType.cellular)
+						terminal.doTermcap("ti");
+				}
+				import std.string;
+				return to!(dchar[])(cast(char[]) std.file.read(tmpName)).chomp;
+			} catch(Exception e) {
+				// edit failed, we should prolly tell them but idk how....
+				return null;
+			}
 		}
 	}
 
